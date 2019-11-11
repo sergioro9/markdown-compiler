@@ -1,0 +1,54 @@
+require 'bundler/gem_tasks'
+require 'rake/testtask'
+require 'rake/clean'
+require 'fileutils'
+
+CLEAN.include ['**/.*.sw?', '**/*.gem', 'test/test.log']
+
+task :default => [:test, :package]
+task :package => [:clean]
+
+Rake::TestTask.new do |t|
+  t.libs << 'lib' << 'test'
+  t.test_files = FileList["test/**/*_test.rb"]
+end
+
+namespace :test do
+  desc "Run specific tests. Usage: rake test:select test/test_one test/test_two"
+  task :select do
+    $LOAD_PATH << 'lib' << 'test'
+    Dir["lib/**/*.rb","test/helper.rb"].each {|f| require f}
+    ARGV[1..].each {|f| require f}
+    exit
+  end
+end
+
+namespace :notes do
+  @tags = %w(OPTIMIZE FIXME TODO TYPO)
+
+  @tags.each do |tag|
+    task tag.downcase.to_sym do
+      Rake::Task["notes:custom"].invoke(tag)
+    end
+  end
+
+  desc "Enumerate all annotations (use notes:optimize, :fixme, :todo for focus)"
+  task :custom, [:tags] do |t, args|
+    @tags = args[:tags].nil? ? @tags : [args[:tags]]
+    dirs = %w(lib test)
+    regex = Regexp.new(@tags.map{|t| t.gsub(/^|$/, '\b')}.join("|"))
+
+    Dir["{#{dirs.join(',')}}/**/*"].each do |item|
+      next if File.directory?(item)
+      puts "#{item}:" if File.read(item).match(regex)
+      File.read(item).each_line.with_index do |line, index|
+        next unless line.match(regex)
+        line.gsub!(/^ *# */,"")
+        puts "  * [#{index}] [#{line.split(' ').first}] #{line.split(' ')[1..-1].join(' ')}"
+      end
+    end
+  end
+end
+
+desc "Enumerate all annotations"
+task :notes => ["notes:custom"]
